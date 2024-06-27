@@ -1,33 +1,55 @@
+import threading
 import socket
 import time
-def server(host = 'localhost', port=8082):
-    
-    #The maximum amount of data to be received at once
-    data_payload = 2048 
-    # Create a TCP socket
-    sock = socket.socket(socket.AF_INET,  socket.SOCK_STREAM)
-    # Enable reuse address/port 
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # Bind the socket to the port
-    server_address = (host, port)
-    print ("Starting up echo server  on %s port %s" % server_address)
-    sock.bind(server_address)
-    # Listen to clients, argument specifies the max no. of queued connections
-    sock.listen(5) 
-    i = 0
-    while True: 
-        print ("Waiting to receive message from client")        
-        client, address = sock.accept()
-        data = client.recv(data_payload) 
-        if data:
+
+# Lista de clientes conectados ao servidor
+clients = []
+
+# Função para lidar com as mensagens de um cliente
+def handle_client(client):
+  while True:
+      try:
+            msg = client.recv(2048)
             with open("log.txt","a") as file:
-                file.write(f"<{time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))}:({address[0]})>:'{data.decode('utf-8')}' \n")
-            print (f"Data: '{data.decode('utf-8')}'")
-            client.send(data)
-            print (f"sent '{data.decode('utf-8')}' bytes back to {address}")
-            # end connection
-            client.close()
-            
-            i+=1
-            if i>=3: break           
-server()
+                file.write(f"<{time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))}:({client.getpeername()[0]})>:'{msg.decode('utf-8')}' \n")
+            broadcast(msg, client)
+      except:
+          remove_client(client)
+          break
+
+# Função para transmitir mensagens para todos os clientes
+def broadcast(msg, sender):
+  for client in clients:
+      if client != sender:
+          try:                
+                client.send(msg)            
+          except:
+                remove_client(client)
+
+# Função para remover um cliente da lista
+def remove_client(client):
+  clients.remove(client)
+
+# Função principal
+def main():
+  server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+  print("Iniciou o servidor de bate-papo")
+
+  try:
+      server.bind(("localhost", 7777))
+      server.listen()
+  except:
+      return print('\nNão foi possível iniciar o servidor!\n')
+
+  while True:
+      client, addr = server.accept()
+      clients.append(client)
+      print(f'Cliente conectado com sucesso. IP: {addr}')
+
+      # Inicia uma nova thread para lidar com as mensagens do cliente
+      thread = threading.Thread(target=handle_client, args=(client,))
+      thread.start()      
+
+# Executa o programa
+main()
